@@ -1,9 +1,36 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Component } from "react";
 import dynamic from "next/dynamic";
 
-const PnLChart = dynamic(() => import("./components/PnLChart"), { ssr: false });
+const PnLChart = dynamic(() => import("./components/PnLChart"), {
+  ssr: false,
+  loading: () => <div style={{ color: "#64748b", padding: "20px", textAlign: "center" }}>Memuat grafik...</div>,
+});
+
+// ===== Error Boundary =====
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: "20px", color: "#ef4444", background: "#1e293b", borderRadius: "8px" }}>
+          <strong>Komponen gagal dimuat.</strong>
+          <pre style={{ fontSize: "11px", marginTop: "8px", color: "#94a3b8" }}>
+            {this.state.error?.message}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ===== SVG Icon Components =====
 const Icons = {
@@ -262,7 +289,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Winrate Harian"
-          value={`${(stats?.winrate || 0).toFixed(1)}%`}
+          value={`${(Number(stats?.winrate) || 0).toFixed(1)}%`}
           icon={Icons.target}
           iconClass="green"
           cardClass="profit"
@@ -278,12 +305,12 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Pertumbuhan Modal"
-          value={`${(stats?.growth || 0).toFixed(2)}%`}
+          value={`${(Number(stats?.growth) || 0).toFixed(2)}%`}
           icon={Icons.growth}
-          iconClass={stats?.growth >= 0 ? "cyan" : "red"}
-          valueClass={stats?.growth >= 0 ? "profit" : "loss"}
-          cardClass={stats?.growth >= 0 ? "cyan" : "loss"}
-          sub={`Rata-rata harian: ${formatIDR(stats?.avgDailyPnl || 0)}`}
+          iconClass={Number(stats?.growth) >= 0 ? "cyan" : "red"}
+          valueClass={Number(stats?.growth) >= 0 ? "profit" : "loss"}
+          cardClass={Number(stats?.growth) >= 0 ? "cyan" : "loss"}
+          sub={`Rata-rata harian: ${formatIDR(Number(stats?.avgDailyPnl) || 0)}`}
         />
       </div>
 
@@ -299,7 +326,9 @@ export default function DashboardPage() {
           </div>
           <div className="card-body">
             <div className="chart-container">
-              <PnLChart data={stats?.chartData || []} />
+              <ErrorBoundary>
+                <PnLChart data={stats?.chartData || []} />
+              </ErrorBoundary>
             </div>
           </div>
         </div>
