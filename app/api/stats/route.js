@@ -12,8 +12,8 @@ export async function GET(request) {
     const month = parseInt(searchParams.get("month") || now.getMonth() + 1);
     const year = parseInt(searchParams.get("year") || now.getFullYear());
 
-    const startOfMonth = new Date(year, month - 1, 1);
-    const endOfMonth = new Date(year, month, 1);
+    const startOfMonth = new Date(Date.UTC(year, month - 1, 1));
+    const endOfMonth = new Date(Date.UTC(year, month, 1));
 
     const trades = await prisma.tradeLog.findMany({
       where: { date: { gte: startOfMonth, lt: endOfMonth } },
