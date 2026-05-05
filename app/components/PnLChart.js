@@ -5,12 +5,9 @@ import {
   CategoryScale,
   LinearScale,
   BarElement,
-  LineElement,
-  PointElement,
   Title,
   Tooltip,
   Legend,
-  Filler,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
 
@@ -18,18 +15,15 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
-  LineElement,
-  PointElement,
   Title,
   Tooltip,
-  Legend,
-  Filler
+  Legend
 );
 
 function formatShortIDR(value) {
   if (Math.abs(value) >= 1000000) return `${(value / 1000000).toFixed(1)}jt`;
   if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(0)}rb`;
-  return value.toString();
+  return String(value);
 }
 
 export default function PnLChart({ data }) {
@@ -45,8 +39,21 @@ export default function PnLChart({ data }) {
           gap: "12px",
         }}
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
-          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="36"
+          height="36"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#475569"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ opacity: 0.5 }}
+        >
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
         </svg>
         <p style={{ color: "#64748b", fontSize: "0.82rem" }}>
           Belum ada data grafik untuk bulan ini
@@ -56,18 +63,16 @@ export default function PnLChart({ data }) {
   }
 
   const labels = data.map((d) => {
-    const date = new Date(d.date);
+    const date = new Date(d.date + "T00:00:00Z");
     return date.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
   });
 
-  const dailyPnl = data.map((d) => d.dailyPnl);
-  const cumulativePnl = data.map((d) => d.cumulativePnl);
+  const dailyPnl = data.map((d) => Number(d.dailyPnl) || 0);
 
   const chartData = {
     labels,
     datasets: [
       {
-        type: "bar",
         label: "PnL Harian",
         data: dailyPnl,
         backgroundColor: dailyPnl.map((v) =>
@@ -80,23 +85,6 @@ export default function PnLChart({ data }) {
         borderRadius: 5,
         borderSkipped: false,
         barPercentage: 0.65,
-        order: 2,
-      },
-      {
-        type: "line",
-        label: "PnL Kumulatif",
-        data: cumulativePnl,
-        borderColor: "#3b82f6",
-        backgroundColor: "rgba(59, 130, 246, 0.06)",
-        borderWidth: 2,
-        pointBackgroundColor: "#3b82f6",
-        pointBorderColor: "#090d1a",
-        pointBorderWidth: 2,
-        pointRadius: 3.5,
-        pointHoverRadius: 5.5,
-        fill: true,
-        tension: 0.35,
-        order: 1,
       },
     ],
   };
@@ -104,10 +92,6 @@ export default function PnLChart({ data }) {
   const options = {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      mode: "index",
-      intersect: false,
-    },
     plugins: {
       legend: {
         display: true,
@@ -115,10 +99,9 @@ export default function PnLChart({ data }) {
         align: "end",
         labels: {
           color: "#94a3b8",
-          font: { family: "'Inter', sans-serif", size: 11, weight: "500" },
+          font: { size: 11 },
           padding: 16,
           usePointStyle: true,
-          pointStyleWidth: 8,
         },
       },
       tooltip: {
@@ -129,8 +112,6 @@ export default function PnLChart({ data }) {
         borderWidth: 1,
         cornerRadius: 8,
         padding: 12,
-        titleFont: { family: "'Inter', sans-serif", weight: "700", size: 12 },
-        bodyFont: { family: "'JetBrains Mono', monospace", size: 11 },
         callbacks: {
           label: function (context) {
             const value = context.parsed.y;
@@ -139,26 +120,26 @@ export default function PnLChart({ data }) {
               currency: "IDR",
               minimumFractionDigits: 0,
             }).format(value);
-            return ` ${context.dataset.label}: ${formatted}`;
+            return ` PnL Harian: ${formatted}`;
           },
         },
       },
     },
     scales: {
       x: {
-        grid: { color: "rgba(255, 255, 255, 0.03)", drawBorder: false },
+        grid: { color: "rgba(255, 255, 255, 0.03)" },
         ticks: {
           color: "#64748b",
-          font: { family: "'Inter', sans-serif", size: 10 },
+          font: { size: 10 },
           maxRotation: 0,
         },
         border: { display: false },
       },
       y: {
-        grid: { color: "rgba(255, 255, 255, 0.03)", drawBorder: false },
+        grid: { color: "rgba(255, 255, 255, 0.03)" },
         ticks: {
           color: "#64748b",
-          font: { family: "'JetBrains Mono', monospace", size: 10 },
+          font: { size: 10 },
           callback: (value) => formatShortIDR(value),
         },
         border: { display: false },
