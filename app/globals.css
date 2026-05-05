@@ -269,7 +269,7 @@ body::before {
   background: var(--gradient-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  padding: 22px 24px;
+  padding: 14px 18px;
   backdrop-filter: blur(16px);
   transition: all var(--transition-smooth);
   position: relative;
@@ -304,7 +304,7 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 .stat-card-label {
@@ -316,8 +316,8 @@ body::before {
 }
 
 .stat-card-icon {
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
@@ -325,8 +325,8 @@ body::before {
 }
 
 .stat-card-icon svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
 }
 
 .stat-card-icon.green { background: var(--accent-green-dim); color: var(--accent-green); }
@@ -337,7 +337,7 @@ body::before {
 .stat-card-icon.cyan { background: var(--accent-cyan-dim); color: var(--accent-cyan); }
 
 .stat-card-value {
-  font-size: 1.6rem;
+  font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: -0.025em;
   font-family: 'JetBrains Mono', monospace;
