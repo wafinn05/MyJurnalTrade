@@ -327,7 +327,8 @@ export async function GET(request) {
       );
     }
 
-    const webhookUrl = `${appUrl}/api/telegram`;
+    const cleanAppUrl = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl;
+    const webhookUrl = `${cleanAppUrl}/api/telegram`;
 
     const response = await fetch(
       `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/setWebhook`,
