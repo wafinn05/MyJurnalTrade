@@ -1,17 +1,59 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { sendTelegramMessage, formatIDR } from "@/lib/telegram";
+import { sendTelegramMessage, editTelegramMessage, formatIDR } from "@/lib/telegram";
 
-/**
- * POST /api/telegram
- * Webhook handler untuk menerima pesan dari Telegram Bot
- */
 export async function POST(request) {
   try {
     const body = await request.json();
-    const message = body?.message;
 
-    // Validasi: pastikan ada pesan masuk
+    // ====== HANDLE CALLBACK QUERIES (INLINE BUTTONS) ======
+    if (body.callback_query) {
+      const callbackQuery = body.callback_query;
+      const data = callbackQuery.data;
+      const chatId = callbackQuery.message.chat.id.toString();
+      const messageId = callbackQuery.message.message_id;
+
+      if (data === "confirm_reset") {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+
+        const startOfMonth = new Date(Date.UTC(year, month - 1, 1));
+        const endOfMonth = new Date(Date.UTC(year, month, 1));
+
+        // Hapus data bulan ini
+        await prisma.tradeLog.deleteMany({
+          where: { date: { gte: startOfMonth, lt: endOfMonth } }
+        });
+        await prisma.capital.deleteMany({
+          where: { month, year }
+        });
+
+        await editTelegramMessage(
+          chatId,
+          messageId,
+          "🗑️ <b>DATA BERHASIL DIRESET</b>\n\nSeluruh riwayat trading dan modal di bulan ini telah dihapus dari sistem. Mari mulai lembaran baru dengan lebih disiplin! 💪✨"
+        );
+      } else if (data === "cancel_reset") {
+        await editTelegramMessage(
+          chatId,
+          messageId,
+          "🛡️ <b>RESET DIBATALKAN</b>\n\nFiuhh! Hampir saja. Data trading Anda tetap aman tersimpan. Lanjutkan profitnya! 🚀"
+        );
+      }
+
+      // Acknowledge callback ke Telegram
+      await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callback_query_id: callbackQuery.id })
+      });
+
+      return NextResponse.json({ ok: true });
+    }
+
+    // ====== HANDLE NORMAL MESSAGES ======
+    const message = body?.message;
     if (!message || !message.text) {
       return NextResponse.json({ ok: true });
     }
@@ -29,22 +71,20 @@ export async function POST(request) {
 
       await sendTelegramMessage(
         chatId,
-        `<b>Trading Dashboard Bot Aktif!</b>\n\n` +
-          `Chat ID Anda: <code>${chatId}</code>\n\n` +
-          `<b>Cara Penggunaan:</b>\n` +
-          `- Kirim angka positif untuk <b>Profit</b>\n` +
-          `  Contoh: <code>150000</code> = Profit Rp150.000\n\n` +
-          `- Kirim angka negatif untuk <b>Loss</b>\n` +
-          `  Contoh: <code>-50000</code> = Loss Rp50.000\n\n` +
-          `- Tambahkan catatan setelah angka (opsional)\n` +
-          `  Contoh: <code>200000 XAUUSD buy</code>\n\n` +
-          `<b>Perintah:</b>\n` +
-          `/status - Ringkasan hari ini\n` +
-          `/bulan - Ringkasan bulan ini\n` +
-          `/modal - Set modal bulan ini\n` +
-          `/bantuan - Tampilkan bantuan`
+        `👋 <b>Selamat Datang di Jurnal Trading Pro!</b> 📊\n\n` +
+          `Bot ini akan menyinkronkan setiap trading Anda langsung ke Dashboard secara <i>real-time</i>.\n\n` +
+          `📝 <b>Cara Pencatatan:</b>\n` +
+          `🟢 Kirim angka positif untuk <b>Profit</b>\n` +
+          `  <i>Contoh:</i> <code>150000 XAUUSD Buy</code>\n\n` +
+          `🔴 Kirim angka negatif untuk <b>Loss</b>\n` +
+          `  <i>Contoh:</i> <code>-50000 EURUSD Kena SL</code>\n\n` +
+          `🛠️ <b>Menu Perintah Utama:</b>\n` +
+          `💰 /modal - Set target/modal bulan ini\n` +
+          `📅 /status - Laporan performa hari ini\n` +
+          `📈 /bulan - Rekapitulasi bulan ini\n` +
+          `⚠️ /reset - Hapus semua data bulan ini\n` +
+          `ℹ️ /bantuan - Panduan lengkap`
       );
-
       return NextResponse.json({ ok: true });
     }
 
@@ -52,17 +92,42 @@ export async function POST(request) {
     if (text === "/bantuan" || text === "/help") {
       await sendTelegramMessage(
         chatId,
-        `<b>Panduan Trading Dashboard Bot</b>\n\n` +
-          `<b>Input Profit/Loss:</b>\n` +
-          `- <code>150000</code> = Profit Rp150.000\n` +
-          `- <code>-50000</code> = Loss Rp50.000\n` +
-          `- <code>200000 XAUUSD long</code> = Dengan catatan\n\n` +
-          `<b>Perintah:</b>\n` +
-          `/status - Ringkasan hari ini\n` +
-          `/bulan - Ringkasan bulan ini\n` +
-          `/modal - Set modal bulan ini\n` +
-          `/bantuan - Tampilkan pesan ini`
+        `📚 <b>Panduan Penggunaan Bot</b>\n\n` +
+          `Mencatat trade itu mudah! Cukup ketik nominal (angka) beserta catatan opsional.\n\n` +
+          `<b>Contoh Input:</b>\n` +
+          `✅ <code>150000 TP1 Gold</code> (Mencatat profit)\n` +
+          `❌ <code>-25000</code> (Mencatat loss tanpa catatan)\n\n` +
+          `<b>Daftar Perintah Lanjutan:</b>\n` +
+          `🔹 /status - Lihat ringkasan PnL harian\n` +
+          `🔹 /bulan - Lihat PnL, Winrate & Growth bulanan\n` +
+          `🔹 /modal - Atur saldo awal bulan\n` +
+          `🔹 /reset - Bersihkan seluruh data bulan ini\n\n` +
+          `<i>💡 Tips: Selalu catat setiap trade agar statistik dashboard Anda akurat!</i>`
       );
+      return NextResponse.json({ ok: true });
+    }
+
+    // ====== COMMAND: /reset ======
+    if (text === "/reset") {
+      const resetMsg = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: "⚠️ <b>PERINGATAN ZONA BERBAHAYA</b> ⚠️\n\nApakah Anda YAKIN ingin menghapus <b>SELURUH</b> data riwayat trading beserta pengaturan modal untuk bulan ini?\n\n<i>Tindakan ini permanen dan tidak dapat dibatalkan.</i>",
+          parse_mode: "HTML",
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: "✅ YA, HAPUS SEMUA DATA", callback_data: "confirm_reset" }
+              ],
+              [
+                { text: "❌ BATALKAN", callback_data: "cancel_reset" }
+              ]
+            ]
+          }
+        })
+      });
       return NextResponse.json({ ok: true });
     }
 
@@ -70,14 +135,10 @@ export async function POST(request) {
     if (text === "/status") {
       const today = new Date();
       const startOfDay = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate()
+        Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
       );
       const endOfDay = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate() + 1
+        Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() + 1)
       );
 
       const todayTrades = await prisma.tradeLog.findMany({
@@ -88,25 +149,30 @@ export async function POST(request) {
       if (todayTrades.length === 0) {
         await sendTelegramMessage(
           chatId,
-          `<b>Status Hari Ini</b>\n\nBelum ada input trading hari ini.`
+          `💤 <b>Laporan Harian</b>\n\nBelum ada aktivitas trading yang tercatat hari ini. Semoga market hari ini bersahabat! 📈`
         );
         return NextResponse.json({ ok: true });
       }
 
       const totalPnl = todayTrades.reduce((sum, t) => sum + t.amount, 0);
-      const indicator = totalPnl >= 0 ? "PROFIT" : "LOSS";
+      const indicator = totalPnl >= 0 ? "🟢 PROFIT" : "🔴 LOSS";
 
-      let statusText = `<b>Status Hari Ini</b>\n`;
-      statusText += `${today.toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n\n`;
-      statusText += `<b>Total PnL: ${formatIDR(totalPnl)}</b> (${indicator})\n`;
-      statusText += `Jumlah Input: ${todayTrades.length}\n\n`;
+      let statusText = `📊 <b>Status Trading Hari Ini</b>\n`;
+      statusText += `<i>${today.toLocaleDateString("id-ID", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</i>\n\n`;
+      statusText += `Total Entri: <b>${todayTrades.length} Trade</b>\n`;
+      statusText += `Net PnL: <b>${formatIDR(totalPnl)}</b> (${indicator})\n\n`;
+      statusText += `<b>📝 Riwayat Terakhir:</b>\n`;
 
-      todayTrades.forEach((trade) => {
-        const sign = trade.amount >= 0 ? "+" : "";
-        statusText += `${sign}${formatIDR(trade.amount)}`;
-        if (trade.note) statusText += ` - ${trade.note}`;
-        statusText += "\n";
+      todayTrades.slice(0, 5).forEach((t, index) => {
+        const mark = t.amount >= 0 ? "✅" : "❌";
+        const prefix = t.amount >= 0 ? "+" : "";
+        const catatan = t.note ? ` <i>(${t.note})</i>` : "";
+        statusText += `${index + 1}. ${mark} ${prefix}${formatIDR(t.amount)}${catatan}\n`;
       });
+
+      if (todayTrades.length > 5) {
+        statusText += `\n<i>...dan ${todayTrades.length - 5} trade lainnya di dashboard.</i>`;
+      }
 
       await sendTelegramMessage(chatId, statusText);
       return NextResponse.json({ ok: true });
@@ -115,58 +181,50 @@ export async function POST(request) {
     // ====== COMMAND: /bulan ======
     if (text === "/bulan") {
       const now = new Date();
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
 
-      const monthTrades = await prisma.tradeLog.findMany({
-        where: { date: { gte: startOfMonth, lt: endOfMonth } },
-      });
+      const startOfMonth = new Date(Date.UTC(year, month - 1, 1));
+      const endOfMonth = new Date(Date.UTC(year, month, 1));
 
-      const capital = await prisma.capital.findUnique({
-        where: {
-          month_year: {
-            month: now.getMonth() + 1,
-            year: now.getFullYear(),
-          },
-        },
-      });
+      const [trades, capital] = await Promise.all([
+        prisma.tradeLog.findMany({
+          where: { date: { gte: startOfMonth, lt: endOfMonth } },
+        }),
+        prisma.capital.findUnique({
+          where: { month_year: { month, year } },
+        }),
+      ]);
 
-      const netPnl = monthTrades.reduce((sum, t) => sum + t.amount, 0);
+      const netPnl = trades.reduce((sum, t) => sum + t.amount, 0);
       const pajak = netPnl > 0 ? netPnl * 0.1 : 0;
 
-      const tradingDays = new Set(
-        monthTrades.map((t) => t.date.toISOString().split("T")[0])
-      );
-
       const dailyPnl = {};
-      monthTrades.forEach((t) => {
-        const key = t.date.toISOString().split("T")[0];
-        dailyPnl[key] = (dailyPnl[key] || 0) + t.amount;
-      });
-      const winDays = Object.values(dailyPnl).filter((v) => v > 0).length;
-      const lossDays = Object.values(dailyPnl).filter((v) => v < 0).length;
-      const winrate =
-        tradingDays.size > 0
-          ? ((winDays / tradingDays.size) * 100).toFixed(1)
-          : 0;
-
-      const growth =
-        capital && capital.amount > 0
-          ? ((netPnl / capital.amount) * 100).toFixed(2)
-          : "N/A";
-
-      const monthName = now.toLocaleDateString("id-ID", {
-        month: "long",
-        year: "numeric",
+      trades.forEach((t) => {
+        const dateKey = t.date.toISOString().split("T")[0];
+        if (!dailyPnl[dateKey]) dailyPnl[dateKey] = 0;
+        dailyPnl[dateKey] += t.amount;
       });
 
-      let recap = `<b>Ringkasan Bulan ${monthName}</b>\n\n`;
-      recap += `Modal: ${capital ? formatIDR(capital.amount) : "Belum diset"}\n`;
-      recap += `Net PnL: <b>${formatIDR(netPnl)}</b>\n`;
-      recap += `Pajak (10%): ${formatIDR(pajak)}\n`;
-      recap += `Hari Trading: ${tradingDays.size} hari\n`;
-      recap += `Pertumbuhan Modal: ${growth === "N/A" ? growth : growth + "%"}\n`;
-      recap += `Winrate Harian: ${winrate}% (${winDays}W / ${lossDays}L)\n`;
+      const tradingDays = Object.keys(dailyPnl).length;
+      const winDays = Object.values(dailyPnl).filter((d) => d > 0).length;
+      const lossDays = Object.values(dailyPnl).filter((d) => d < 0).length;
+      const winrate = tradingDays > 0 ? ((winDays / tradingDays) * 100).toFixed(1) : 0;
+      
+      const growth = capital && capital.amount > 0
+        ? ((netPnl / capital.amount) * 100).toFixed(2)
+        : "N/A";
+
+      const monthName = now.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+
+      let recap = `🏆 <b>Rekapitulasi Bulan ${monthName}</b> 🏆\n\n`;
+      recap += `💼 Modal Awal: <b>${capital ? formatIDR(capital.amount) : "Belum diset"}</b>\n`;
+      recap += `💵 Net PnL: <b>${formatIDR(netPnl)}</b>\n`;
+      recap += `🏢 Est. Pajak (10%): ${formatIDR(pajak)}\n`;
+      recap += `📅 Hari Trading: ${tradingDays} hari aktif\n`;
+      recap += `🚀 Pertumbuhan: <b>${growth === "N/A" ? growth : growth + "%"}</b>\n`;
+      recap += `🎯 Winrate Harian: ${winrate}% (${winDays} Win / ${lossDays} Loss)\n\n`;
+      recap += `<i>Cek detail grafik selengkapnya di Dashboard Web!</i>`;
 
       await sendTelegramMessage(chatId, recap);
       return NextResponse.json({ ok: true });
@@ -175,12 +233,8 @@ export async function POST(request) {
     // ====== COMMAND: /modal ======
     if (text === "/modal") {
       const now = new Date();
-      const monthName = now.toLocaleDateString("id-ID", {
-        month: "long",
-        year: "numeric",
-      });
+      const monthName = now.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
 
-      // Set waiting state
       await prisma.userConfig.upsert({
         where: { id: "main" },
         update: { telegramChatId: chatId, waitingCapital: true },
@@ -189,10 +243,11 @@ export async function POST(request) {
 
       await sendTelegramMessage(
         chatId,
-        `<b>Set Modal - ${monthName}</b>\n\n` +
-          `Kirim jumlah modal trading Anda untuk bulan ini.\n` +
-          `Contoh: <code>10000000</code> untuk Rp10.000.000\n\n` +
-          `Ketik /batal untuk membatalkan.`
+        `🏦 <b>Setup Modal Awal - ${monthName}</b>\n\n` +
+          `Berapa target modal trading Anda bulan ini?\n` +
+          `Silakan balas dengan angka.\n\n` +
+          `<i>Contoh:</i> <code>10000000</code> <i>(Untuk Rp 10.000.000)</i>\n\n` +
+          `Ketik /batal jika tidak ingin mengubah.`
       );
       return NextResponse.json({ ok: true });
     }
@@ -204,24 +259,20 @@ export async function POST(request) {
         data: { waitingCapital: false },
       });
 
-      await sendTelegramMessage(
-        chatId,
-        `Input modal dibatalkan.`
-      );
+      await sendTelegramMessage(chatId, `🚫 <b>Dibatalkan</b>\n\nProses input modal telah dibatalkan.`);
       return NextResponse.json({ ok: true });
     }
 
-    // ====== CHECK WAITING STATE ======
+    // ====== CHECK WAITING STATE FOR CAPITAL ======
     const config = await prisma.userConfig.findUnique({ where: { id: "main" } });
 
-    // ====== WAITING FOR CAPITAL INPUT ======
     if (config?.waitingCapital) {
       const amount = parseFloat(text.replace(/[^0-9]/g, ""));
 
       if (isNaN(amount) || amount <= 0) {
         await sendTelegramMessage(
           chatId,
-          `Format tidak valid. Kirim angka modal Anda.\nContoh: <code>10000000</code>\n\nKetik /batal untuk membatalkan.`
+          `⚠️ <b>Format Tidak Valid</b>\n\nHarap kirimkan angka saja untuk modal Anda.\n<i>Contoh:</i> <code>10000000</code>\n\nAtau ketik /batal untuk membatalkan.`
         );
         return NextResponse.json({ ok: true });
       }
@@ -236,35 +287,35 @@ export async function POST(request) {
         create: { amount, month: targetMonth, year: targetYear },
       });
 
-      // Reset waiting state
       await prisma.userConfig.update({
         where: { id: "main" },
         data: { waitingCapital: false },
       });
 
-      const monthName = now.toLocaleDateString("id-ID", {
-        month: "long",
-        year: "numeric",
-      });
+      const monthName = now.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
 
       await sendTelegramMessage(
         chatId,
-        `<b>Modal Berhasil Disimpan</b>\n\n` +
+        `✅ <b>Modal Berhasil Disimpan!</b>\n\n` +
           `Periode: ${monthName}\n` +
-          `Modal: <b>${formatIDR(amount)}</b>\n\n` +
-          `Dashboard telah diperbarui.`
+          `Modal Baru: <b>${formatIDR(amount)}</b>\n\n` +
+          `Dashboard Anda telah diperbarui. Selamat bertrading! 🚀`
       );
       return NextResponse.json({ ok: true });
     }
 
-    // ====== INPUT PNL (Angka) ======
+    // ====== INPUT PNL (TRADE) ======
     const parts = text.split(/\s+/);
     const amount = parseFloat(parts[0]);
 
     if (isNaN(amount)) {
       await sendTelegramMessage(
         chatId,
-        `Format tidak dikenali.\n\nKirim angka untuk input PnL:\n- <code>150000</code> = Profit\n- <code>-50000</code> = Loss\n\nKetik /bantuan untuk info lebih lanjut.`
+        `🤔 <b>Perintah tidak dikenali</b>\n\n` +
+        `Untuk mencatat trading, pastikan Anda memulai pesan dengan <b>angka</b>:\n` +
+        `🟢 <code>150000</code> (Jika Profit)\n` +
+        `🔴 <code>-50000</code> (Jika Loss)\n\n` +
+        `Butuh bantuan? Ketik /bantuan.`
       );
       return NextResponse.json({ ok: true });
     }
@@ -281,31 +332,24 @@ export async function POST(request) {
       },
     });
 
-    // Hitung total hari ini
-    const startOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-    const endOfDay = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1
-    );
+    const startOfDay = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const endOfDay = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() + 1));
 
     const todayTrades = await prisma.tradeLog.findMany({
       where: { date: { gte: startOfDay, lt: endOfDay } },
     });
 
     const totalToday = todayTrades.reduce((sum, t) => sum + t.amount, 0);
-    const pnlLabel = amount >= 0 ? "Profit" : "Loss";
-    const totalLabel = totalToday >= 0 ? "PROFIT" : "LOSS";
+    const isProfit = amount >= 0;
+    const isTotalProfit = totalToday >= 0;
 
-    let confirmText = `<b>Input Berhasil - ${pnlLabel}</b>\n\n`;
+    let confirmText = `${isProfit ? "🟢" : "🔴"} <b>Input Berhasil - ${isProfit ? "PROFIT" : "LOSS"}</b>\n\n`;
     confirmText += `PnL: <b>${formatIDR(amount)}</b>\n`;
-    if (note) confirmText += `Catatan: ${note}\n`;
-    confirmText += `Waktu: ${now.toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}\n\n`;
-    confirmText += `Total Hari Ini: <b>${formatIDR(totalToday)}</b> (${totalLabel}, ${todayTrades.length} input)`;
+    if (note) confirmText += `Catatan: <i>${note}</i>\n`;
+    confirmText += `Waktu: ${now.toLocaleString("id-ID", { timeZone: "Asia/Jakarta", hour: '2-digit', minute:'2-digit' })}\n\n`;
+    confirmText += `──────────────\n`;
+    confirmText += `📈 <b>Total Hari Ini:</b>\n`;
+    confirmText += `<b>${formatIDR(totalToday)}</b> ${isTotalProfit ? "(✅)" : "(❌)"} dari ${todayTrades.length} trade`;
 
     await sendTelegramMessage(chatId, confirmText);
 
@@ -316,17 +360,14 @@ export async function POST(request) {
   }
 }
 
-// GET endpoint untuk setup webhook
 export async function GET(request) {
   try {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL;
     if (!appUrl) {
-      return NextResponse.json(
-        { error: "NEXT_PUBLIC_APP_URL belum diset" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "NEXT_PUBLIC_APP_URL belum diset" }, { status: 500 });
     }
 
+    // Hilangkan slash di akhir jika ada untuk mencegah double slash (//api)
     const cleanAppUrl = appUrl.endsWith("/") ? appUrl.slice(0, -1) : appUrl;
     const webhookUrl = `${cleanAppUrl}/api/telegram`;
 
@@ -335,10 +376,7 @@ export async function GET(request) {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: webhookUrl,
-          allowed_updates: ["message"],
-        }),
+        body: JSON.stringify({ url: webhookUrl, allowed_updates: ["message", "callback_query"] }),
       }
     );
 
