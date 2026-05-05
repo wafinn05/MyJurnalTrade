@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/monthly-recap",
+      "schedule": "1 17 1 * *"
+    }
+  ]
+}

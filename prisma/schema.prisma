@@ -1,0 +1,46 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Menyimpan konfigurasi user (modal awal, Chat ID Telegram)
+model UserConfig {
+  id              String   @id @default("main")
+  telegramChatId  String?  @map("telegram_chat_id")
+  waitingCapital  Boolean  @default(false) @map("waiting_capital")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("user_config")
+}
+
+// Menyimpan catatan modal per bulan
+model Capital {
+  id        String   @id @default(cuid())
+  amount    Float    // Jumlah modal dalam IDR
+  month     Int      // Bulan (1-12)
+  year      Int      // Tahun
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([month, year])
+  @@map("capitals")
+}
+
+// Menyimpan setiap entri Profit/Loss harian
+model TradeLog {
+  id        String   @id @default(cuid())
+  amount    Float    // Jumlah PnL dalam IDR (positif = profit, negatif = loss)
+  date      DateTime // Tanggal & waktu pencatatan (otomatis dari server)
+  note      String?  // Catatan opsional
+  source    String   @default("telegram") // Sumber input: "telegram" atau "dashboard"
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("trade_logs")
+}
