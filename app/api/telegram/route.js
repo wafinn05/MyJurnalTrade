@@ -131,6 +131,70 @@ export async function POST(request) {
       return NextResponse.json({ ok: true });
     }
 
+    // ====== COMMAND: /past (Input Trading Masa Lalu) ======
+    if (text.startsWith("/past ")) {
+      const parts = text.split(/\s+/);
+      // Format: /past YYYY-MM-DD NOMINAL [Catatan]
+      if (parts.length < 3) {
+        await sendTelegramMessage(chatId, `⚠️ Format salah.\nGunakan: <code>/past YYYY-MM-DD NOMINAL [Catatan]</code>\nContoh: <code>/past 2026-04-15 150000 Profit</code>`);
+        return NextResponse.json({ ok: true });
+      }
+
+      const dateStr = parts[1];
+      const amount = parseFloat(parts[2]);
+      const note = parts.slice(3).join(" ") || null;
+
+      if (isNaN(amount) || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        await sendTelegramMessage(chatId, `⚠️ Format salah.\nPastikan tanggal pakai format YYYY-MM-DD dan nominal berupa angka.`);
+        return NextResponse.json({ ok: true });
+      }
+
+      const pastDate = new Date(`${dateStr}T12:00:00Z`); // Jam 12 siang UTC agar aman dari timezone
+
+      await prisma.tradeLog.create({
+        data: {
+          amount: amount,
+          date: pastDate,
+          note: note,
+          source: "telegram",
+        },
+      });
+
+      await sendTelegramMessage(chatId, `✅ <b>Data Masa Lalu Tersimpan</b>\n\nTanggal: ${dateStr}\nPnL: <b>${formatIDR(amount)}</b>\nCatatan: ${note || "-"}\n\n<i>Data telah masuk ke dashboard.</i>`);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ====== COMMAND: /pastmodal (Input Modal Masa Lalu) ======
+    if (text.startsWith("/pastmodal ")) {
+      const parts = text.split(/\s+/);
+      // Format: /pastmodal YYYY-MM NOMINAL
+      if (parts.length < 3) {
+        await sendTelegramMessage(chatId, `⚠️ Format salah.\nGunakan: <code>/pastmodal YYYY-MM NOMINAL</code>\nContoh: <code>/pastmodal 2026-04 10000000</code>`);
+        return NextResponse.json({ ok: true });
+      }
+
+      const monthStr = parts[1];
+      const amount = parseFloat(parts[2]);
+
+      if (isNaN(amount) || !/^\d{4}-\d{2}$/.test(monthStr)) {
+        await sendTelegramMessage(chatId, `⚠️ Format salah.\nPastikan bulan pakai format YYYY-MM dan nominal berupa angka.`);
+        return NextResponse.json({ ok: true });
+      }
+
+      const [yearStr, mStr] = monthStr.split("-");
+      const targetYear = parseInt(yearStr);
+      const targetMonth = parseInt(mStr);
+
+      await prisma.capital.upsert({
+        where: { month_year: { month: targetMonth, year: targetYear } },
+        update: { amount },
+        create: { amount, month: targetMonth, year: targetYear },
+      });
+
+      await sendTelegramMessage(chatId, `✅ <b>Modal Masa Lalu Tersimpan</b>\n\nPeriode: ${monthStr}\nModal: <b>${formatIDR(amount)}</b>\n\n<i>Dashboard telah diperbarui.</i>`);
+      return NextResponse.json({ ok: true });
+    }
+
     // ====== COMMAND: /status ======
     if (text === "/status") {
       const today = new Date();
